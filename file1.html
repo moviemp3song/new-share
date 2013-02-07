@@ -1,0 +1,389 @@
+
+
+<link rel="stylesheet" type="text/css" href="http://www.hulkshare.com/combine/styles.css?dd=130126" />
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.4/jquery.min.js"></script>
+<script type="text/javascript" src="http://www.hulkshare.com/combine/swfobject.js?dd=130126"></script>
+<script type="text/javascript" src="http://www.hulkshare.com/combine/main.js,xupload_legacy.js,jquery.ajaxQueue.js,FlashDetect.js,plupload.full.js?dd=130126"></script>
+
+<script type="text/javascript">
+  var usrId = 815068;
+	var owner_id = 815068;
+	var uploading = false;
+	var queueMaxFiles = 100;
+	var queueMaxSize = 300; //in MB
+	var nSelFiles = 0;
+	var nFiles = 0;
+	var fileRealArray = [];
+	var statusArray = [];
+	var wrongFiles = [];
+	var dragdrop_bounds = new Array();
+	var uploader = false;
+	var ext_allowed_music='mp3';
+	var ext_allowed_archive='zip,rar';
+	
+	function choose_avatar( orig_ext )
+	{
+		var ext = (orig_ext+'').toLowerCase();
+		switch(ext)
+		{
+			case 'mp3':case 'mp4':
+				return '/images/track_default_32x32.png';
+				break;
+			
+			case 'zip':case 'rar':
+				return false;
+				break;
+			
+			case 'jpg':case 'jpeg':case 'gif':case 'png':case 'bmp':
+				return '/images/track_default_32x32.png';
+				break;
+			
+			default:
+				return '/images/file_default_32x32.png';
+		}
+	}
+	
+	$(document).ready(function(){
+		if( !$.browser.msie )
+		{
+			//Drags events inside the page
+			dragdrop_bounds = $('#dropArea').offset();
+			dragdrop_bounds.right  = dragdrop_bounds.left + parseInt($('#dropArea').width());
+			dragdrop_bounds.bottom = dragdrop_bounds.top  + parseInt($('#dropArea').height());
+			
+			$(document).bind('dragenter', function(e) {
+				if( e.pageX>=dragdrop_bounds.left && e.pageX<=dragdrop_bounds.right && e.pageY>=dragdrop_bounds.top && e.pageY<=dragdrop_bounds.bottom )
+					$('#dropArea').addClass('active');
+				else
+					$('#dropArea').removeClass('active');
+				
+				e.preventDefault();
+			});
+			$(document).bind('dragleave', function(e) {
+				if( e.pageX>=dragdrop_bounds.left && e.pageX<=dragdrop_bounds.right && e.pageY>=dragdrop_bounds.top && e.pageY<=dragdrop_bounds.bottom )
+					$('#dropArea').addClass('active');
+				else
+					$('#dropArea').removeClass('active');
+				
+				e.preventDefault();
+			});
+			//if I place the song anywhere else in the document.
+			$(document).bind('drop', function(e) {
+				if(!$('#dropArea').hasClass('active'))
+					e.preventDefault();
+			});
+		}
+		else
+		{
+			$('.old_info').html('<a class="dropGrayBtn" href="#" id="pickfiles" style="position: relative; z-index: 0;">Browse files</a>');
+		}
+		
+		set_uploader();
+		
+		//delete track
+		$('#dropArea_container').delegate('.dropGreenIcon2', 'click', function(e) {
+			e.preventDefault();
+			var row = $(this).parent();
+			if(row)
+			{
+				var file_id = row.attr('id');
+				
+				$.each(uploader.files, function(i, file) {
+					try
+					{
+						if(file.id==file_id)
+						{
+							uploader.removeFile(file);
+						}
+					}
+					catch(e){}
+				});
+				row.remove();
+				
+				nFiles--;
+				if( $('.dropGrayWidgetBlock').length<=$('.dropErrorFile').length )
+				{
+					$('#plUploadBtn').addClass('dispNone2');
+					$('.old_info').removeClass('dispNone2');
+				}
+				uploader.refresh();
+			}
+		});
+		
+		//Start Upload
+		$('#dropArea_container').delegate('#plUploadBtn', 'click', function(e) {
+			e.preventDefault();
+			$(this).addClass('dispNone2');
+			//no files in list
+			if (nFiles==0) {
+				window.alert('No files in the list')
+				return false;
+			}
+			$('#dropArea .dropGreenIcon2').remove();
+			
+			$('.dropErrorFile').remove();
+			
+			uploading = true;
+			
+			uploader.start();
+		});
+	});
+	
+	function warning_message(){
+		return "If you leave the page now the unprocessed files fail the upload.\n";
+	}
+	
+	function set_uploader()
+	{
+		if(uploader)
+		{
+			uploader.destroy();
+		}
+		uploader = new plupload.Uploader({
+			runtimes : 'html5,flash',
+			browse_button : 'pickfiles',
+			container : 'dropArea_container',
+			drop_element : 'dropArea', 
+			autostart:true, 
+			//max_file_size : queueMaxSize.toString() + 'mb',
+			multipart : true,
+			multipart_params : {},
+			url : 'http://upl.hulkshare.com/ajax/dropbox.php',
+			flash_swf_url : '/swf/plupload.flash.swf',
+			filters : [
+				{title : "Files", extensions : ext_allowed_music+','+ext_allowed_archive}
+			]
+		});
+	
+		uploader.init();
+		
+		uploader.bind('FilesAdded', function(up, files) {
+			uploader.files.splice(1,files.length);
+			//prevent actions if uploading
+			if (uploading || $('.dropGrayWidgetBlock').length>$('.dropErrorFile').length)
+			{
+				$('#dropArea').removeClass('active');
+				if($('.dropGrayWidgetBlock').length>$('.dropErrorFile').length)
+					window.alert("You can only upload one file each time");
+				
+				return;
+			}
+			
+			if(files.length>1)
+			{
+				var files = new Array(files[0]);//only allow one per time
+				window.alert("You can only upload one file each time");
+			}
+			
+			//check if file is fine (extension is included here)
+			if (up.total.queued + files.length > queueMaxFiles) {
+				window.alert("File queue cannot exceed " + queueMaxFiles + " files");
+				return false;
+			}
+			
+			//Check queue size
+			var selSize = 0;
+			for(var i=0; i<files.length; i++)
+				selSize += files[i].size;
+			
+			if (up.total.size+selSize > queueMaxSize*1024*1024) {
+				window.alert("File queue cannot exceed " + queueMaxSize + "MB");
+				return false;
+			}	
+			
+			//add only if not in list
+			for (var j = 0; j < files.length; j++) {
+				for (var i = 0; i < up.files.length; i++) {
+					if (up.files[i].name==files[j].name && up.files[i].id!=files[j].id) {
+						files[j]=false;
+					}
+				}
+			}
+			
+			var prev_nFiles = nFiles;
+			$('#dropArea').removeClass('active');
+			var renderString = [];
+			var extension = '';
+			var avatar = '';
+			$.each(files, function(i, file) {
+				if(file!==false && file.status==1)
+				{
+					extension = file.name.substr( (file.name.lastIndexOf('.') +1)).toLowerCase(); // // #10097 : lower case before validate
+					avatar = choose_avatar( extension );
+					if(avatar==false) avatar = '';
+					else avatar = '<img alt="avatar" src="'+avatar+'" />';
+					
+					renderString.push('<div class="dropGrayWidgetBlock" id="'+file.id+'">');
+					renderString.push('<input type="hidden" class="user_id" value="'+usrId+'">');
+					renderString.push('<input type="hidden" class="track" value="'+file.name+'">');
+					renderString.push('<input type="hidden" class="artist" value="">');
+					renderString.push('<input type="hidden" class="album" value="">');
+					renderString.push('<input type="hidden" class="description" value="">');
+					renderString.push('<input type="hidden" class="genre" value="">');
+					renderString.push('<input type="hidden" class="style" value="">');
+					renderString.push('<input type="hidden" class="tags" value="">');
+					renderString.push('<a class="avBlock customBgType32_rar" href="#">'+avatar+'</a>');
+					renderString.push('<div class="dropWidgetFileName"><b>'+(file.name.length>15? file.name.substring(0,15)+"..." : file.name)+'</b> '+plupload.formatSize(file.size)+'</div>');
+					renderString.push('<a class="dropGreenIcon2" href="#"></a>');
+					renderString.push('<div class="clear"></div></div>');
+					
+					nFiles++;
+				}
+			});
+			
+			//if is the first time I'm adding valid files can't go from the page without warning
+			if( prev_nFiles==0 && nFiles>0)
+			{
+				$(window).bind("beforeunload", warning_message);
+				//if there are wrong files but not good files, then I should remove
+				if($('#pickfiles').length>0 && wrongFiles.length>0)
+				{
+					$('#pickfiles').remove();
+				}
+			}
+			
+			//now the bounds are bigger
+			dragdrop_bounds = $('#dropArea').offset();
+			dragdrop_bounds.right  = dragdrop_bounds.left + parseInt($('#dropArea').width());
+			dragdrop_bounds.bottom = dragdrop_bounds.top  + parseInt($('#dropArea').height());
+			
+			$('.old_info').addClass('dispNone2');
+			$('#plUploadBtn').removeClass('dispNone2');
+			$('#dropArea').prepend(renderString.join(''));
+			uploader.refresh();
+		});
+		
+		//progress bar
+		uploader.bind('UploadProgress', function(up, file) {
+			$('.uploadProgressBar').css({'width' : up.total.percent + '%'});
+		});
+		
+		uploader.bind('Error', function(up, args) {
+			//needed to manage the wrong filetypes
+			$('#dropArea').removeClass('active');
+			var file = args.file;
+			var name_used = "";
+			//avoid repeated names on wrong filetypes
+			if(jQuery.inArray( file.name, wrongFiles)<0)
+			{
+				extension = file.name.substr( (file.name.lastIndexOf('.') +1)).toLowerCase(); // // #10097 : lower case before validate
+				avatar = choose_avatar( extension );
+				if(avatar==false) avatar = '';
+				else avatar = '<img alt="avatar" src="'+avatar+'" />';
+				var renderString = [];
+				renderString.push('<div class="dropGrayWidgetBlock dropErrorFile" id="'+file.id+'">');
+				renderString.push('<a class="avBlock customBgType32_rar" href="#">'+avatar+'</a>');
+				renderString.push('<div class="dropWidgetFileName"><b>'+(file.name.length>15? file.name.substring(0,15)+"..." : file.name)+'</b><div class="redSucessText">File format invalid</div></div><a class="dropGreenIcon2" href="#"></a><div class="clear"></div></div>');
+				
+				$('#dropArea').prepend(renderString.join(''));
+				wrongFiles.push(file.name);
+			}
+			if(!nFiles && $('.dropGrayWidgetBlock').length<=$('.dropErrorFile').length)
+			{
+				$('.old_info').removeClass('dispNone2');
+			}
+			//now the bounds are bigger
+			dragdrop_bounds = $('#dropArea').offset();
+			dragdrop_bounds.right  = dragdrop_bounds.left + parseInt($('#dropArea').width());
+			dragdrop_bounds.bottom = dragdrop_bounds.top  + parseInt($('#dropArea').height());
+			
+			uploader.refresh();
+		});
+		uploader.bind('BeforeUpload', function(up, file) {
+			
+			//setup post track data
+			//artist, album, track, tags, genre, style, description, user_id
+			uploader.settings.multipart_params = {
+				user_id : owner_id,
+				dropbox_usr_id : usrId,
+				track : encodeURIComponent($('#' + file.id + '>.track').val()),
+				artist : encodeURIComponent($('#' + file.id + '>.artist').val()),
+				description : encodeURIComponent($('#' + file.id + '>.description').val()),
+				album : encodeURIComponent($('#' + file.id + '>.album').val()), 
+				genre : $('#' + file.id + '>.genre').val(), 
+				style : $('#' + file.id + '>.style').val(), 
+				tags : encodeURIComponent($('#' + file.id + '>.tags').val())
+			}
+		
+		});
+		uploader.bind('UploadFile', function(up, file) {
+			$('#'+file.id).after('<div class="dropWidgetBlockProgress"><div class="uploadProgress"><div style="width: 0%;" class="uploadProgressBar"></div></div>Please, <b>do not close this window </b><br/>while upload is in progress!</div>');
+		});
+		
+		//file finished uploading
+		uploader.bind('FileUploaded', function(up, file, response) {
+			//remove spinner and add ok
+			$('.dropWidgetBlockProgress').remove();
+			error = false;
+			extension = file.name.substr( (file.name.lastIndexOf('.') +1)).toLowerCase(); // // #10097 : lower case before validate
+			avatar = choose_avatar( extension );
+			if(avatar==false) avatar = '';
+			else avatar = '<img alt="avatar" src="'+avatar+'" />';
+			
+			if (response && response.response) { 
+				var response_json = jQuery.parseJSON( response.response );
+				if(response_json.status=="OK")
+				{
+					var newhtml = '<a class="avBlock customBgType32_rar" href="#">'+avatar+'</a><div class="dropWidgetFileName"><b>'+(file.name.length>15? file.name.substring(0,15)+"..." : file.name)+'</b></div>'+'<div class="greenSucessText">Uploaded successfully!</div><div class="clear"></div>';
+					$('#' + file.id).html(newhtml);
+				}
+				else
+				{
+					error=true;
+				}
+			}
+			else
+				error = true;
+			
+			if(error)
+			{
+				var newhtml = '<a class="avBlock customBgType32_rar" href="#">'+avatar+'</a><div class="dropWidgetFileName"><b>'+(file.name.length>15? file.name.substring(0,15)+"..." : file.name)+'</b><div class="redSucessText">File format invalid</div></div><a class="dropGreenIcon2" href="#"></a><div class="clear"></div>';
+				$('#' + file.id).html(newhtml);
+			}
+		});
+		
+		//finish uploading files
+		uploader.bind('UploadComplete', function(up, files) {
+			$(window).unbind("beforeunload");
+			//if the file was uploaded succefully or not
+			if($('#dropArea').find('.greenSucessText').length>0)
+			{
+				window.alert('Uploaded successfully');
+			}
+			else
+			{
+				window.alert('Error on upload, please try again.');
+			}
+			uploading=false;
+			$('.dropGrayWidgetBlock').remove();
+			$('#pickfiles').remove();
+			$('.old_info').append('<a class="dropGrayBtn dropGrayBtn1" id="pickfiles" href="#">Try to upload other file</a>');
+			$('.old_info').removeClass('dispNone2');
+			set_uploader();
+		});
+	}
+	
+</script>
+
+</head>
+<body style="background: none;">
+	<div class="dropboxWidget" style="background-color: #7ABB00; border: solid 1px #5B8D00; color: #FFFFFF;" id="dropArea_container">
+		<a href="http://www.hulkshare.com" target="_blank" class="dropLogo"></a>
+		<div class="dropHeader" style="text-shadow: 1px 1px #5B8D00;">Dropbox</div>
+		<div class="dropText">Send your file and share it with<br/><a style="color: #FFFFFF;" href="http://www.hulkshare.com/Moviemp3song" target="_blank">Moviemp3song</a></div>
+		<div class="dropArea" id="dropArea">
+			<div class="dropContainer dispNone">
+				You are about to upload the file: 
+			</div>
+			<div class="old_info">
+				<div class="dtxt">Drop file here</div> or <a class="dropGrayBtn" href="http://www.hulkshare.com/dropbox/dropbox_widget.php?usr_id=815068&border=5B8D00&text=FFFFFF&bg=7ABB00#" id="pickfiles">Browse files</a>
+			</div>
+			<a class="dropGrayBtn dispNone2" href="http://www.hulkshare.com/dropbox/dropbox_widget.php?usr_id=815068&border=5B8D00&text=FFFFFF&bg=7ABB00#" id="plUploadBtn">Start upload</a>
+			<div class="clear"></div>
+		</div>
+		<div class="dropInfo">Supported formats: MP3, Zip, Rar files</div>
+		<div class="clear"></div>
+	</div>
+</body>
+
+</html>
